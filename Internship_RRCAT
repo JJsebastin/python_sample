@@ -1,0 +1,105 @@
+-> Installing required libraries ;
+pip install streamlit openai pyodbc
+
+-> Downloading ODBC ;
+https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+-> PHASES :-
+1: Define the Scope & Dataset
+2: Set Up the Environment
+3: Connect Python to SQL Server
+4: Fetching Event Log Data
+5: Add Natural Language Query Support (NLP)
+6: Build the Chat Interface
+
+-----------------------------------------------
+
+pip install pyodbc openai
+
+-----------------------------------------------
+
+import pyodbc
+
+# Replace with your actual details
+conn = pyodbc.connect(
+    'DRIVER={ODBC Driver 17 for SQL Server};'
+    'SERVER=localhost;'
+    'DATABASE=EventLogDB;'
+    'UID=your_username;'
+    'PWD=your_password'
+)
+
+cursor = conn.cursor()
+
+
+-----------------------------------------------
+
+def fetch_logs(event_type=None, keyword=None):
+    query = "SELECT TOP 10 TimeGenerated, EventID, SourceName, Message FROM EventLogs WHERE 1=1"
+
+    if event_type:
+        query += f" AND EventType = '{event_type}'"
+    if keyword:
+        query += f" AND Message LIKE '%{keyword}%'"
+
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    return rows
+
+
+-----------------------------------------------
+
+import openai
+
+openai.api_key = 'your_openai_api_key'
+
+def interpret_query(user_query):
+    prompt = f"""
+You are a SQL assistant. Given a natural language question about an event log database, write a SQL WHERE clause.
+
+Example:
+Question: Show login failures from yesterday.
+SQL: EventType = 'Error' AND Message LIKE '%login failed%' AND TimeGenerated >= CAST(GETDATE() - 1 AS DATE)
+
+Now process this:
+Question: {user_query}
+SQL:"""
+
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=prompt,
+        temperature=0,
+        max_tokens=150
+    )
+
+    clause = response.choices[0].text.strip()
+    return clause
+
+-----------------------------------------------
+
+def smart_fetch(user_query):
+    where_clause = interpret_query(user_query)
+    full_query = f"SELECT TOP 10 TimeGenerated, EventID, SourceName, Message FROM EventLogs WHERE {where_clause}"
+    cursor.execute(full_query)
+    return cursor.fetchall()
+
+-----------------------------------------------
+
+def chatbot():
+    print("EventLog Assistant Ready. Type 'exit' to quit.")
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() == 'exit':
+            break
+
+        try:
+            results = smart_fetch(user_input)
+            for row in results:
+                print(f"{row.TimeGenerated} | {row.SourceName} | {row.Message[:100]}...")
+        except Exception as e:
+            print(f"Error: {e}")
+
+-----------------------------------------------
